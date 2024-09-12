@@ -91,8 +91,7 @@ def ensure_directory_exists(directory):
         os.makedirs(directory)
 
 # 翻訳言語リスト
-languages = ['en', 'es', 'fr', 'de', 'zh-cn', 'zh-tw', 'ko', 'ru', 'it', 'pt',
-             'ar', 'hi', 'tr', 'vi', 'th', 'id', 'pl', 'nl', 'he', 'tl', 'sv']
+languages = ['en', 'es', 'fr']
 
 # 字幕ファイルのアップロード
 def upload_subtitle_files(youtube, video_id, existing_captions):
