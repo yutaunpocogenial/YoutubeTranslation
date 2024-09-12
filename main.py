@@ -2,7 +2,6 @@ import time
 import openai
 import os
 import re
-from pytube import YouTube
 from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -33,7 +32,7 @@ if openai.api_key == "YOUR_OPENAI_API_KEY":
 SCOPES = ["https://www.googleapis.com/auth/youtube.force-ssl"]
 
 # クライアントシークレットファイルのパス
-CLIENT_SECRET_FILE = os.path.join(CREDENTIALS_DIR, 'client_secret_621738409325-p3crbqbqrb5lhlb8qpc52lhhvarrli61.apps.googleusercontent.com.json')
+CLIENT_SECRET_FILE = os.path.join(CREDENTIALS_DIR, 'client_secret.json')
 CREDENTIALS_FILE = os.path.join(CREDENTIALS_DIR, 'token.json')
 
 # 字幕の保存ディレクトリ
@@ -49,7 +48,7 @@ def authenticate_youtube():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET_FILE, SCOPES)
-            creds = flow.run_local_server(port=8080)  # ポート番号を固定
+            creds = flow.run_local_server(port=8080)
         with open(CREDENTIALS_FILE, 'w') as token:
             token.write(creds.to_json())
     youtube = build('youtube', 'v3', credentials=creds)
@@ -60,11 +59,21 @@ def get_existing_captions(youtube, video_id):
     try:
         request = youtube.captions().list(part="snippet", videoId=video_id)
         response = request.execute()
-        existing_languages = [caption['snippet']['language'] for caption in response['items']]
-        return existing_languages
+        existing_captions = [{'id': caption['id'], 'language': caption['snippet']['language']} for caption in response['items']]
+        return existing_captions
     except HttpError as e:
         print(f"字幕リストの取得中にエラー: {e}")
         return []
+
+# YouTube動画から字幕ファイルのダウンロード
+def download_caption(youtube, caption_id):
+    try:
+        request = youtube.captions().download(id=caption_id, tfmt="srt")
+        response = request.execute()
+        return response
+    except HttpError as e:
+        print(f"字幕のダウンロード中にエラー: {e}")
+        return None
 
 # ChatGPTで翻訳
 def translate_with_chatgpt(text, target_lang):
@@ -121,37 +130,48 @@ def main():
     # YouTube APIクライアントを認証
     youtube = authenticate_youtube()
 
-    # YouTube動画のURLを指定
-    video_url = "https://www.youtube.com/watch?v=Kt3nPoaVaLw"
-    yt = YouTube(video_url)
-    video_id = yt.video_id
+    # YouTube動画IDを指定
+    video_id = "Kt3nPoaVaLw"  # 動画IDを直接指定
 
-    # 利用可能な字幕リストを表示（デバッグ用）
-    available_captions = yt.captions
-    for caption in available_captions:
-            print(f"言語コード: {caption.code}, 名前: {caption.name}")
-
-    print(f"利用可能な字幕: {[caption.code for caption in available_captions]}")
-    
     # 既存の字幕を取得
     existing_captions = get_existing_captions(youtube, video_id)
+    
+    if not existing_captions:
+        print("字幕が存在しません。")
+        return
 
-    # 日本語字幕を取得
-    try:
-        captions = yt.captions['ja']  # get_by_language_code の代わりに辞書としてアクセス
-        srt_captions = captions.generate_srt_captions()
-        print("取得した字幕内容:")
-        print(srt_captions[:500])  # 500文字まで表示（デバッグ用）
-    except KeyError:
+    print(f"既存の字幕: {existing_captions}")
+    
+    # 日本語の字幕IDを取得
+    caption_id = None
+    for caption in existing_captions:
+        if caption['language'] == 'ja':
+            caption_id = caption['id']
+            break
+    
+    if not caption_id:
         print("日本語の字幕が存在しません。")
-        return  # エラーが発生した場合、関数を終了する
+        return
+    
+    # 日本語字幕を取得
+    srt_captions = download_caption(youtube, caption_id)
+    if not srt_captions:
+        print("字幕のダウンロードに失敗しました。")
+        return
+    
+    # バイナリデータをUTF-8文字列にデコード
+    srt_captions = srt_captions.decode('utf-8')
+
+    print("取得した字幕内容:")
+    print(srt_captions[:500])  # 500文字まで表示（デバッグ用）
 
     # 翻訳言語リスト
     languages = ['en', 'es', 'fr', 'de']
 
     # 翻訳とアップロードの処理
+    ensure_directory_exists(SUBTITLES_DIR)
     for lang in languages:
-        if lang in existing_captions:
+        if any(caption['language'] == lang for caption in existing_captions):
             print(f"言語 '{lang}' の字幕は既に存在します。")
         else:
             translated_subs = translate_srt_file(srt_captions, lang)
