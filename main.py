@@ -10,15 +10,34 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
-# APIキー設定
-openai.api_key = os.getenv("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
+# credentialsフォルダのパス
+CREDENTIALS_DIR = 'credentials'
+OPENAI_API_KEY_FILE = os.path.join(CREDENTIALS_DIR, 'openai_api_key.txt')
+
+# OpenAI APIキーをファイルから読み込む関数
+def load_openai_api_key():
+    try:
+        with open(OPENAI_API_KEY_FILE, 'r') as file:
+            api_key = file.read().strip()
+            return api_key
+    except FileNotFoundError:
+        raise Exception(f"OpenAI APIキーが見つかりません。{OPENAI_API_KEY_FILE} を確認してください。")
+
+# APIキーを読み込んで設定
+openai.api_key = load_openai_api_key()
+
+if openai.api_key == "YOUR_OPENAI_API_KEY":
+    raise ValueError("OpenAI APIキーが設定されていません。環境変数 OPENAI_API_KEY を設定してください。")
 
 # 認証情報設定
 SCOPES = ["https://www.googleapis.com/auth/youtube.force-ssl"]
 
 # クライアントシークレットファイルのパス
-CLIENT_SECRET_FILE = 'credentials/client_secret.json'
-CREDENTIALS_FILE = 'credentials/token.json'
+CLIENT_SECRET_FILE = os.path.join(CREDENTIALS_DIR, 'client_secret_621738409325-p3crbqbqrb5lhlb8qpc52lhhvarrli61.apps.googleusercontent.com.json')
+CREDENTIALS_FILE = os.path.join(CREDENTIALS_DIR, 'token.json')
+
+# 字幕の保存ディレクトリ
+SUBTITLES_DIR = "subtitles"
 
 # YouTube APIクライアントの認証
 def authenticate_youtube():
@@ -30,7 +49,7 @@ def authenticate_youtube():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET_FILE, SCOPES)
-            creds = flow.run_local_server(port=0)
+            creds = flow.run_local_server(port=8080)  # ポート番号を固定
         with open(CREDENTIALS_FILE, 'w') as token:
             token.write(creds.to_json())
     youtube = build('youtube', 'v3', credentials=creds)
@@ -93,27 +112,39 @@ def upload_subtitles(youtube, video_id, language, file_path):
     except HttpError as e:
         print(f"字幕アップロード中にエラー（言語: {language}）: {e}")
 
+# ディレクトリが存在しない場合は作成
+def ensure_directory_exists(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
 def main():
     # YouTube APIクライアントを認証
     youtube = authenticate_youtube()
 
     # YouTube動画のURLを指定
-    video_url = "https://www.youtube.com/watch?v=orVlZwyDJXE"
+    video_url = "https://www.youtube.com/watch?v=Kt3nPoaVaLw"
     yt = YouTube(video_url)
     video_id = yt.video_id
 
+    # 利用可能な字幕リストを表示（デバッグ用）
+    available_captions = yt.captions
+    for caption in available_captions:
+            print(f"言語コード: {caption.code}, 名前: {caption.name}")
+
+    print(f"利用可能な字幕: {[caption.code for caption in available_captions]}")
+    
     # 既存の字幕を取得
     existing_captions = get_existing_captions(youtube, video_id)
 
     # 日本語字幕を取得
     try:
-        captions = yt.captions['ja']
+        captions = yt.captions['ja']  # get_by_language_code の代わりに辞書としてアクセス
         srt_captions = captions.generate_srt_captions()
-        with open("subtitles/japanese_subtitles.srt", "w", encoding="utf-8") as f:
-            f.write(srt_captions)
+        print("取得した字幕内容:")
+        print(srt_captions[:500])  # 500文字まで表示（デバッグ用）
     except KeyError:
         print("日本語の字幕が存在しません。")
-        return
+        return  # エラーが発生した場合、関数を終了する
 
     # 翻訳言語リスト
     languages = ['en', 'es', 'fr', 'de']
@@ -124,7 +155,7 @@ def main():
             print(f"言語 '{lang}' の字幕は既に存在します。")
         else:
             translated_subs = translate_srt_file(srt_captions, lang)
-            subtitle_file_path = f"subtitles/subtitles_{lang}.srt"
+            subtitle_file_path = os.path.join(SUBTITLES_DIR, f"subtitles_{lang}.srt")
             with open(subtitle_file_path, "w", encoding="utf-8") as f:
                 f.write(translated_subs)
             upload_subtitles(youtube, video_id, lang, subtitle_file_path)
