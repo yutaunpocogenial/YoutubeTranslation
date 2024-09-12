@@ -3,3 +3,4 @@ get-pip.py
 credentials/token.json
 credentials/openai_api_key.txt
 subtitles
+settings.text

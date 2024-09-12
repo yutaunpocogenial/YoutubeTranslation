@@ -1,14 +1,89 @@
-# YouTube Subtitle Translator
+1. settings.textに、動画IDを記載してください。
+2. 動画の字幕ファイルをsubtitlesフォルダに保存してください。
+3. subtitles/zz_subtitles_title.textに、動画のタイトルを記載してください。
 
-このプロジェクトは、YouTube動画から字幕を取得し、ChatGPTを使用して複数の言語に翻訳し、再度YouTubeにアップロードするツールです。
 
-## 必要なもの
+ChatGPTで字幕ファイルを翻訳する際の手順
+・字幕ファイルの中身を貼り付け、下記プロンプトで翻訳タイトルを生成
+・生成されたファイルを、subtitlesフォルダに保存
 
-- Python 3.x
-- Google API credentials (OAuth 2.0 クライアントID)
-- OpenAI APIキー
+*************
+この字幕情報を、下記言語で翻訳してください。
+それぞれの言語の翻訳ファイルを、作成してください。
+命名規則としては、subtitles_言語コード.srtとしてください。
 
-## セットアップ
+en - 英語 (English)
+es - スペイン語 (Spanish)
+fr - フランス語 (French)
+de - ドイツ語 (German)
+zh-cn - 簡体字中国語 (Simplified Chinese)
+zh-tw - 繁体字中国語 (Traditional Chinese)
+ko - 韓国語 (Korean)
+ru - ロシア語 (Russian)
+it - イタリア語 (Italian)
+pt - ポルトガル語 (Portuguese)
+ar - アラビア語 (Arabic)
+hi - ヒンディー語 (Hindi)
+tr - トルコ語 (Turkish)
+vi - ベトナム語 (Vietnamese)
+th - タイ語 (Thai)
+id - インドネシア語 (Indonesian)
+pl - ポーランド語 (Polish)
+nl - オランダ語 (Dutch)
+he - ヘブライ語 (Hebrew)
+tl - タガログ語 (Tagalog)
+sv - スウェーデン語 (Swedish)
+*************
 
-1. `git clone` でこのリポジトリをクローンします。
+
+ChatGPTでタイトルを翻訳する際の手順
+・タイトルを貼り付け、下記プロンプトで翻訳タイトルを生成
+・生成されたファイルを、zz_subtitles_title.textに保存
+
+*************
+この日本語のタイトルを、下記言語で翻訳してください。
+翻訳したタイトルは、例のように記載してください。
+
+例
+en: My Amazing Video
+es: Mi Video Increíble
+fr: Mon Vidéo Incroyable
+de: Mein Unglaubliches Video
+
+
+翻訳言語
+en - 英語 (English)
+es - スペイン語 (Spanish)
+fr - フランス語 (French)
+de - ドイツ語 (German)
+zh-cn - 簡体字中国語 (Simplified Chinese)
+zh-tw - 繁体字中国語 (Traditional Chinese)
+ko - 韓国語 (Korean)
+ru - ロシア語 (Russian)
+it - イタリア語 (Italian)
+pt - ポルトガル語 (Portuguese)
+ar - アラビア語 (Arabic)
+hi - ヒンディー語 (Hindi)
+tr - トルコ語 (Turkish)
+vi - ベトナム語 (Vietnamese)
+th - タイ語 (Thai)
+id - インドネシア語 (Indonesian)
+pl - ポーランド語 (Polish)
+nl - オランダ語 (Dutch)
+he - ヘブライ語 (Hebrew)
+tl - タガログ語 (Tagalog)
+sv - スウェーデン語 (Swedish)
+
+*************
+
+
+
+
+
+4. 実行
+```
+python3 main.py
+```
+
+
 
