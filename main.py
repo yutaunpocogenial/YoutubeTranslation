@@ -37,20 +37,58 @@ def authenticate_youtube():
     youtube = build('youtube', 'v3', credentials=creds)
     return youtube
 
-# YouTube動画のタイトルを更新
+# YouTube動画のカテゴリIDとタイトルを取得
+def get_video_info(youtube, video_id):
+    request = youtube.videos().list(part="snippet", id=video_id)
+    response = request.execute()
+    if response['items']:
+        snippet = response['items'][0]['snippet']
+        return snippet.get('title'), snippet.get('categoryId')
+    return None, None
+
+# YouTube動画のタイトルを更新（localizationsを使用）
 def update_video_title(youtube, video_id, language, new_title):
     try:
-        request = youtube.videos().update(
-            part="snippet",
-            body={
-                "id": video_id,
-                "snippet": {
-                    "title": new_title
-                }
-            }
+        # 既存の動画リソースを取得
+        request = youtube.videos().list(
+            part="snippet,localizations",
+            id=video_id
         )
         response = request.execute()
-        print(f"言語 '{language}' の動画のタイトルを '{new_title}' に更新しました。")
+        if not response['items']:
+            print(f"動画 {video_id} が見つかりませんでした。")
+            return
+        video = response['items'][0]
+        snippet = video['snippet']
+        localizations = video.get('localizations', {})
+
+        # ローカライズされたタイトルと説明を更新
+        localizations[language] = {
+            'title': new_title,
+            'description': localizations.get(language, {}).get('description', snippet.get('description', ''))
+        }
+
+        # 更新用のリクエストボディを準備
+        update_body = {
+            'id': video_id,
+            'snippet': {
+                'categoryId': snippet.get('categoryId'),
+                'title': snippet.get('title'),
+                'description': snippet.get('description'),
+                'tags': snippet.get('tags', []),
+                'defaultLanguage': snippet.get('defaultLanguage', 'ja'),
+                'defaultAudioLanguage': snippet.get('defaultAudioLanguage', 'ja')
+            },
+            'localizations': localizations
+        }
+
+        # 動画リソースを更新
+        request = youtube.videos().update(
+            part="snippet,localizations",
+            body=update_body
+        )
+        response = request.execute()
+        print(f"言語 '{language}' のタイトルを '{new_title}' に更新しました。")
     except HttpError as e:
         print(f"動画タイトルの更新中にエラー（言語: {language}）: {e}")
 
@@ -98,8 +136,8 @@ def upload_subtitle_files(youtube, video_id, existing_captions):
     ensure_directory_exists(SUBTITLES_DIR)
     
     for file_name in os.listdir(SUBTITLES_DIR):
-        if file_name.endswith(".srt"):
-            match = re.match(r"subtitles_(.+)\.srt", file_name)
+        if file_name.endswith(".srt") or file_name.endswith(".sbv"):  # sbvにも対応
+            match = re.match(r"subtitles_(.+)\.srt", file_name) or re.match(r"subtitles_(.+)\.sbv", file_name)
             if match:
                 language = match.group(1)
                 if language in languages:  # 言語リストに基づくフィルタ
@@ -113,7 +151,7 @@ def upload_subtitle_files(youtube, video_id, existing_captions):
                         time.sleep(1)  # リクエスト間に遅延を挟む
 
 # 翻訳タイトルのアップロード
-def upload_translated_titles(youtube, video_id, existing_title):
+def upload_translated_titles(youtube, video_id):
     title_file_path = os.path.join(SUBTITLES_DIR, "zz_subtitles_title.txt")
     
     if os.path.exists(title_file_path):
@@ -125,11 +163,10 @@ def upload_translated_titles(youtube, video_id, existing_title):
                     translated_title = translated_title.strip()
 
                     if lang in languages:  # 言語リストに基づくフィルタ
-                        if translated_title and translated_title != existing_title:
+                        if translated_title:
                             update_video_title(youtube, video_id, lang, translated_title)
     else:
         print(f"タイトルファイル '{title_file_path}' が見つかりません。")
-
 
 # 設定ファイルからvideoIDを取得
 def get_video_id_from_settings():
@@ -142,24 +179,22 @@ def get_video_id_from_settings():
     print(f"設定ファイル '{settings_file_path}' が見つからないか、videoIDが指定されていません。")
     return None
 
-def get_existing_video_info(youtube, video_id):
+# YouTube APIからサポートされているi18n言語を取得して表示
+def print_supported_i18n_languages(youtube):
     try:
-        request = youtube.videos().list(
-            part="snippet",
-            id=video_id
-        )
+        request = youtube.i18nLanguages().list(part="snippet")
         response = request.execute()
-        if response['items']:
-            return response['items'][0]['snippet']['title']
-        else:
-            return None
+        for item in response['items']:
+            print(f"Language: {item['snippet']['hl']}, Name: {item['snippet']['name']}")
     except HttpError as e:
-        print(f"動画情報の取得中にエラー: {e}")
-        return None
+        print(f"i18n言語の取得中にエラー: {e}")
 
 def main():
     # YouTube APIクライアントを認証
     youtube = authenticate_youtube()
+
+    # サポートされているi18n言語を表示
+    # print_supported_i18n_languages(youtube)
 
     # 設定ファイルからYouTube動画IDを取得
     video_id = get_video_id_from_settings()
@@ -169,14 +204,11 @@ def main():
     # 既存の字幕を取得
     existing_captions = get_existing_captions(youtube, video_id)
 
-    # 既存のタイトルを取得
-    existing_title = get_existing_video_info(youtube, video_id)
-
     # 字幕ファイルのアップロード
     upload_subtitle_files(youtube, video_id, existing_captions)
 
     # 翻訳されたタイトルのアップロード
-    upload_translated_titles(youtube, video_id, existing_title)
+    upload_translated_titles(youtube, video_id)
 
 if __name__ == "__main__":
     main()
